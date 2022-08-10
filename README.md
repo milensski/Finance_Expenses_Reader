@@ -6,5 +6,5 @@
  - expenses for Withdraw activities from ATMs
  - all other expenses which are not defined in pattern
 
-Used pandas library for reading the xls file and processing it
+Used pandas library for reading the xls file and processing it \
 Tkinter library is used for the GUI 
