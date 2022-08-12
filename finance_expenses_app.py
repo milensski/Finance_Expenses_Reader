@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog, TOP, INSERT
+from tkinter import filedialog, TOP, INSERT, END
 
 import pandas
 
@@ -20,9 +20,9 @@ def open_file():
 
 l = tk.Label(root, text="FINANCE EXPENSES APP", font=['ROBOTO', 25])
 
-T = tk.Text(root, height=20, width=100)
+T = tk.Text(root, width=100)
 
-btn = tk.Button(root, text='Open', command=lambda: open_file())
+# btn = tk.Button(root, text='Open', command=lambda:open_file())
 
 other_exp_label = tk.Label(root, text="OTHER EXPENSES")
 other_exp_label2 = tk.Label(root, text="")
@@ -30,7 +30,7 @@ other_exp_label2 = tk.Label(root, text="")
 food_companies = ['KAUFLAND', 'BILLA', 'LIDL', 'BOLERO', 'ANET']  # companie names to check for Groceries
 petrol_companies = ['BI OIL', 'DEGA', 'LUKOIL', 'EKO', "SHELL", ]  # companie names to check for Gas Expenses
 
-data = pandas.read_excel(open_file())
+data = pandas.read_excel(open_file(),sheet_name='Sheet')
 
 df = pandas.DataFrame(data)
 food_exp = 0
@@ -86,7 +86,7 @@ print(f'Withdraw Expenses: {withdraw_expenses:.2f} BGN')
 print(f'Useless Expenses: {other_expenses:.2f} BGN')
 
 l.pack(side=TOP)
-
+# btn.pack()
 other_exp_label.pack()
 T.pack()
 gas.pack()

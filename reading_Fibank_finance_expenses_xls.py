@@ -57,7 +57,9 @@ for i in range(9, len(df)):
             print(float(df.loc[i][3]), df.loc[i][7])
 
 print()
-print(f'Gas Expenses: {gas_expenses:.2f}')
+print(f'Gas Expenses: {gas_expenses:.2f} BGN')
 print(f'Food Expenses: {food_exp:.2f}')
-print(f'Withdraw Expenses: {withdraw_expenses:.2f}')
-print(f'Useless Expenses: {other_expenses:.2f}')
+print(f'Withdraw Expenses: {withdraw_expenses:.2f} BGN')
+print(f'Useless Expenses: {other_expenses:.2f} BGN')
+
+root.mainloop()
