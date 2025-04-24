@@ -1,65 +1,154 @@
-import pandas
+import pandas as pd
 import tkinter as tk
-from tkinter import filedialog
-from tkinter import messagebox
-
-root = tk.Tk()
-
-root.withdraw()
-
-messagebox.showwarning("Important", "Please select only .xls Files")
-
-file_path = filedialog.askopenfilename(filetypes=[('Excel', '*.xls')])
+from tkinter import filedialog, messagebox
 
 
+def main():
+    root = tk.Tk()
+    root.withdraw()
 
-food_companies = ['KAUFLAND', 'BILLA', 'LIDL', 'BOLERO', 'ANET'] #companie names to check for Groceries
-petrol_companies = ['BI OIL', 'DEGA', 'LUKOIL', 'EKO', "SHELL", ] #companie names to check for Gas Expenses
+    messagebox.showwarning("Important", "Please select only .xls Files")
+    file_path = filedialog.askopenfilename(filetypes=[('Excel', '*.xls')])
+    if not file_path:
+        messagebox.showerror("Error", "No file selected.")
+        return
 
-data = pandas.read_excel(file_path, sheet_name='Sheet')
+    try:
+        df = pd.read_excel(file_path, sheet_name='Sheet')
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to read Excel file:\n{e}")
+        return
 
-df = pandas.DataFrame(data)
-food_exp = 0
-gas_expenses = 0
-withdraw_expenses = 0
-other_expenses = 0
+    # Keywords for different expense types
+    food_companies = ['KAUFLAND', 'BILLA', 'LIDL', 'BOLERO', 'ANET']
+    petrol_companies = ['BI OIL', 'DEGA', 'LUKOIL', 'EKO', "SHELL"]
+    monthly_tax_keywords = ['SOFIYSKA VODA', 'OVERGAS', 'PB PERSONAL', 'YETTEL', 'ELEKTROHOLD']
 
-# df.loc[row][col]
+    # Totals
+    revolut_expenses = withdraw_expenses = gas_expenses = food_expenses = 0.0
+    other_expenses = monthly_tax_expenses = 0.0
 
-print('OTHER EXPENSES:')
+    # Entries for printing
+    revolut_entries, gas_entries, other_entries, monthly_tax_entries, withdraw_entries = [], [], [], [], []
 
-for i in range(9, len(df)):
+    # To store city expenses
+    city_expenses = {}
 
-    gas,food,draw = False,False,False
+    for i in range(9, len(df)):
+        try:
+            amount = df.iloc[i, 3]
+            payment_method = df.iloc[i, 5]
+            description = df.iloc[i, 7]
 
-    draw_col = df.loc[i][5] #COLUMN from table to get payment method
+            if pd.isna(amount):
+                continue
 
-    if type(draw_col) != float and type(df.loc[i][7]) != float: #if statement to check for withdraw from ATM
-        if 'ATM' in draw_col:
-            withdraw_expenses += float(df.loc[i][3])
-            draw = True
+            amount = float(amount)
+            desc_str = str(description).upper() if isinstance(description, str) else ""
+            pay_str = str(payment_method).upper() if isinstance(payment_method, str) else ""
 
-    if type(df.loc[i][7]) != float: #if statement to check for Gas expenses using petrol list
-        for element in petrol_companies:
-            if element in df.loc[i][7]:
-                gas_expenses += float(df.loc[i][3])
-                gas = True
+            # Try to extract city from description (assuming city is at the end of the description)
+            # Looking for city names like "PLEVEN", "SOFIA", etc.
+            city = None
+            city_keywords = ['SOFIA', 'PLEVEN', 'VARNA', 'BURGAS', 'PLOVDIV', 'RUSE',
+                             'STARA ZAGORA', 'SEVLIEVO']  # add more cities as needed
+            for city_name in city_keywords:
+                if city_name in desc_str:
+                    city = city_name
+                    break
 
-    if type(df.loc[i][7]) != float: #if statement to check for Grocerie expenses using Grocerie list
-        for element in food_companies:
-            if element in df.loc[i][7]:
-                food_exp += float(df.loc[i][3])
-                food = True
+            # Classification logic
+            if any(kw in desc_str for kw in monthly_tax_keywords):
+                monthly_tax_expenses += amount
+                monthly_tax_entries.append((amount, description))
+            elif 'REVOLUT' in desc_str or 'REVOLUT' in pay_str:
+                revolut_expenses += amount
+                revolut_entries.append((amount, description))
+            elif 'ATM' in pay_str:
+                withdraw_expenses += amount
+                withdraw_entries.append((amount, description))
+                if city:
+                    # Add to city expenses if city is found
+                    if city not in city_expenses:
+                        city_expenses[city] = 0.0
+                    city_expenses[city] += amount
+                else:
+                    # If no city found, add to other expenses
+                    other_expenses += amount
+                    other_entries.append((amount, description))
+            elif any(comp in desc_str for comp in petrol_companies):
+                gas_expenses += amount
+                gas_entries.append((amount, description))
+            elif any(comp in desc_str for comp in food_companies):
+                food_expenses += amount
+            else:
+                other_expenses += amount
+                other_entries.append((amount, description))
 
-    if not gas and not food and not draw: #if Expense is not in above statements
-        if str(df.loc[i][3]) != 'nan':
-            other_expenses += float(df.loc[i][3])
-            print(float(df.loc[i][3]), df.loc[i][7])
+            # Add amount to city expenses if city is found (for other types of expenses)
+            if city and 'ATM' not in pay_str:
+                if city not in city_expenses:
+                    city_expenses[city] = 0.0
+                city_expenses[city] += amount
 
-print()
-print(f'Gas Expenses: {gas_expenses:.2f} BGN')
-print(f'Food Expenses: {food_exp:.2f}')
-print(f'Withdraw Expenses: {withdraw_expenses:.2f} BGN')
-print(f'Useless Expenses: {other_expenses:.2f} BGN')
+        except Exception as e:
+            print(f"Error processing row {i}: {e}")
 
-root.mainloop()
+    # === PRINT SECTION ===
+    output = ""
+
+    # Append all the details into the output string
+    output += 'REVOLUT EXPENSES:\n'
+    for amt, desc in revolut_entries:
+        output += f"{amt:.2f} BGN -> {desc}\n"
+
+    output += '\nGAS EXPENSES:\n'
+    for amt, desc in gas_entries:
+        output += f"{amt:.2f} BGN -> {desc}\n"
+
+    output += '\nMONTHLY TAXES:\n'
+    for amt, desc in monthly_tax_entries:
+        output += f"{amt:.2f} BGN -> {desc}\n"
+
+    output += '\nWITHDRAW EXPENSES:\n'  # Added section for withdraw expenses
+    for amt, desc in withdraw_entries:
+        output += f"{amt:.2f} BGN -> {desc}\n"  # Printing each withdraw expense
+
+    output += '\nOTHER EXPENSES:\n'
+    for amt, desc in other_entries:
+        output += f"{amt:.2f} BGN -> {desc}\n"
+
+    output += "\nTOTALS:\n"
+    output += f'Gas Expenses: {gas_expenses:.2f} BGN\n'
+    output += f'Food Expenses: {food_expenses:.2f} BGN\n'
+    output += f'Withdraw Expenses: {withdraw_expenses:.2f} BGN\n'
+    output += f'Revolut Expenses: {revolut_expenses:.2f} BGN\n'
+    output += f'Monthly Tax Expenses: {monthly_tax_expenses:.2f} BGN\n'
+    output += f'Other Expenses: {other_expenses:.2f} BGN\n'
+
+    # === CITY EXPENSES ===
+    output += "\nEXPENSES PER CITY:\n"
+    for city, total in city_expenses.items():
+        output += f"{city}: {total:.2f} BGN\n"
+
+    # Print the result to console
+    print(output)
+
+    # Ask the user if they want to save the output to a file
+    save_to_file = messagebox.askyesno("Save to file", "Do you want to save the output to a text file?")
+
+    if save_to_file:
+        # Let the user choose the file path to save the text file
+        file_save_path = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text files", "*.txt")])
+
+        if file_save_path:
+            try:
+                with open(file_save_path, 'w', encoding='utf-8') as file:
+                    file.write(output)
+                messagebox.showinfo("Success", f"File saved successfully to {file_save_path}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save file: {e}")
+
+
+if __name__ == "__main__":
+    main()
