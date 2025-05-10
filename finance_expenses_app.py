@@ -9,7 +9,6 @@ from openai import OpenAI
 
 # Ensure your OpenAI API key is set in the environment
 load_dotenv()
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 
 class ExpenseApp(ttk.Frame):
@@ -278,6 +277,7 @@ class ExpenseApp(ttk.Frame):
             messagebox.showerror("Error", f"Could not save AI insights:\n{e}")
 
     def generate_ai_insights(self):
+        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
         if not self.expenses:
             messagebox.showwarning("No data", "Load data first.")
             return
