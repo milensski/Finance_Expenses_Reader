@@ -277,7 +277,6 @@ class ExpenseApp(ttk.Frame):
             messagebox.showerror("Error", f"Could not save AI insights:\n{e}")
 
     def generate_ai_insights(self):
-        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
         if not self.expenses:
             messagebox.showwarning("No data", "Load data first.")
             return
@@ -295,6 +294,8 @@ class ExpenseApp(ttk.Frame):
         def worker():
             report = self._compose_report_text()
             try:
+                client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
                 resp = client.responses.create(
                     model="gpt-4o",
                     instructions="You are a financial assistant.",
