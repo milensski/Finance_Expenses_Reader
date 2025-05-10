@@ -2,3 +2,6 @@
 .gitattributes
 .idea
 /venv/
+.env*
+
+

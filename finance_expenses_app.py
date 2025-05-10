@@ -1,42 +1,54 @@
 import os
+import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 import pandas as pd
+from dotenv import load_dotenv
+from openai import OpenAI
+
+# Ensure your OpenAI API key is set in the environment
+load_dotenv()
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 
 class ExpenseApp(ttk.Frame):
     def __init__(self, master):
         super().__init__(master, padding=10)
+        self.status = None
+        self.save_ai_btn = None
+        self.ai_text = None
+        self.ai_frame = None
+        self.progress = None
+        self.ai_button = None
+        self.tab_cities = None
+        self.tab_summary = None
+        self.tab_data = None
+        self.tabs = None
+        self.category_tabs = None
         self.master = master
         self.master.title("Modern Finance Expenses App")
-        self.master.geometry("1000x600")
+        self.master.geometry("1000x700")
 
-        # Data
+        # Data containers
         self.df = None
-
-        # Totals and details
         self.expenses = {}
         self.detail_entries = {}
-
-        # City totals
         self.city_expenses = {}
-
-        # Define categories in desired priority order
         self.categories = {
             "Monthly Taxes": ['SOFIYSKA VODA', 'OVERGAS', 'PB PERSONAL', 'YETTEL', 'ELEKTROHOLD'],
             "Revolut": ['REVOLUT'],
-            "ATM Withdrawals": [],  # will match by method
+            "ATM Withdrawals": [],  # matched via method
             "Fuel": ['BI OIL', 'DEGA', 'LUKOIL', 'EKO', 'SHELL'],
             "Food": ['KAUFLAND', 'BILLA', 'LIDL', 'BOLERO', 'ANET'],
-            "Other": []  # everything else
+            "Other": []
         }
 
         self.create_widgets()
         self.pack(fill="both", expand=True)
 
     def create_widgets(self):
-        # — Menu Bar —
+        # Menu bar
         menubar = tk.Menu(self.master)
         file_menu = tk.Menu(menubar, tearoff=0)
         file_menu.add_command(label="Open", command=self.load_file, accelerator="Ctrl+O")
@@ -49,7 +61,7 @@ class ExpenseApp(ttk.Frame):
         self.master.bind_all("<Control-s>", lambda e: self.save_report())
         self.master.bind_all("<Control-q>", lambda e: self.master.quit())
 
-        # — Notebook (Tabs) —
+        # Tabs
         self.tabs = ttk.Notebook(self)
         self.tabs.pack(fill="both", expand=True)
 
@@ -68,14 +80,31 @@ class ExpenseApp(ttk.Frame):
         self.tabs.add(self.tab_cities, text="Cities")
         self._build_cities_tab()
 
-        # One tab per category
+        # Category-specific Tabs
         self.category_tabs = {}
         for cat in self.categories:
             frame = ttk.Frame(self.tabs)
             self.tabs.add(frame, text=cat)
             self._build_category_tab(frame, cat)
 
-        # — Status bar —
+        # AI Insights controls
+        self.ai_button = ttk.Button(self, text="Generate AI Insights", command=self.generate_ai_insights)
+        self.ai_button.pack(side="top", pady=5)
+
+        self.progress = ttk.Progressbar(self, mode='determinate', value=0)
+        self.progress.pack(fill='x', pady=2)
+
+        self.ai_frame = ttk.Frame(self)
+        self.ai_frame.pack(fill="both", expand=True)
+
+        self.ai_text = tk.Text(self.ai_frame, wrap='word', state='disabled')
+        self.ai_text.pack(fill='both', pady=5)
+
+        self.save_ai_btn = ttk.Button(self, text="Save AI Insights as TXT", command=self.save_ai_insights)
+        self.save_ai_btn.pack(pady=5)
+        self.save_ai_btn.config(state='disabled')
+
+        # Status Bar
         self.status = ttk.Label(self, text="Welcome! Open an .xls file to begin.",
                                 relief="sunken", anchor="w")
         self.status.pack(fill="x", side="bottom")
@@ -83,14 +112,11 @@ class ExpenseApp(ttk.Frame):
     def _build_raw_tab(self):
         btn = ttk.Button(self.tab_data, text="Browse…", command=self.load_file)
         btn.pack(anchor="nw", pady=5)
-
         columns = ("Date", "Amount", "Method", "Description")
         self.tree_data = ttk.Treeview(self.tab_data, columns=columns, show="headings")
         for col in columns:
-            anchor = "e" if col == "Amount" else "w"
-            width = 100 if col == "Amount" else 200
             self.tree_data.heading(col, text=col)
-            self.tree_data.column(col, anchor=anchor, width=width)
+            self.tree_data.column(col, anchor="e" if col == "Amount" else "w", width=150)
         self.tree_data.pack(fill="both", expand=True)
 
     def _build_summary_tab(self):
@@ -136,7 +162,6 @@ class ExpenseApp(ttk.Frame):
         except Exception as e:
             messagebox.showerror("Error", f"Could not load file:\n{e}")
             return
-
         self.status.config(text=f"Loaded: {os.path.basename(path)}")
         self._populate_raw()
         self._analyze()
@@ -146,94 +171,62 @@ class ExpenseApp(ttk.Frame):
             self.tree_data.delete(item)
         for idx in range(9, len(self.df)):
             row = self.df.iloc[idx]
-            date = row.iloc[1]
-            amt = row.iloc[3]
-            method = row.iloc[5]
-            desc = row.iloc[7]
+            date, amt, method, desc = row.iloc[1], row.iloc[3], row.iloc[5], row.iloc[7]
             if pd.notna(amt):
-                self.tree_data.insert("", "end",
-                                      values=(date, f"{amt:.2f}", method, desc))
+                self.tree_data.insert("", "end", values=(date, f"{amt:.2f}", method, desc))
 
     def _analyze(self):
-        # reset all trackers
         self.expenses = {cat: 0.0 for cat in self.categories}
         self.detail_entries = {cat: [] for cat in self.categories}
-        self.city_expenses = {"SOFIA": 0.0}  # ensure Sofia key exists
-
-        # city name normalization
+        self.city_expenses = {"SOFIA": 0.0}
         city_variants = {
-            'SOFIYA': 'SOFIA', 'SOFIA': 'SOFIA',
-            'PLEVEN': 'PLEVEN', 'VARNA': 'VARNA',
-            'BURGAS': 'BURGAS', 'PLOVDIV': 'PLOVDIV',
-            'RUSE': 'RUSE', 'STARA ZAGORA': 'STARA ZAGORA',
-            'SEVLIEVO': 'SEVLIEVO'
+            'SOFIYA': 'SOFIA', 'SOFIA': 'SOFIA', 'PLEVEN': 'PLEVEN', 'VARNA': 'VARNA',
+            'BURGAS': 'BURGAS', 'PLOVDIV': 'PLOVDIV', 'RUSE': 'RUSE',
+            'STARA ZAGORA': 'STARA ZAGORA', 'SEVLIEVO': 'SEVLIEVO'
         }
-
-        # classify each transaction
         for idx in range(9, len(self.df)):
             row = self.df.iloc[idx]
             amt = row.iloc[3]
-            if pd.isna(amt):
-                continue
+            if pd.isna(amt): continue
             amt = float(amt)
             method = str(row.iloc[5]).upper() if pd.notna(row.iloc[5]) else ""
             desc = str(row.iloc[7]).upper() if pd.notna(row.iloc[7]) else ""
-
-            # extract city if present
-            city = None
-            for var, norm in city_variants.items():
-                if var in desc:
-                    city = norm
-                    break
-
-            # pick category in defined order
+            city = next((n for v, n in city_variants.items() if v in desc), None)
             chosen = "Other"
-            for cat, keywords in self.categories.items():
-                if keywords:
-                    if any(kw in desc for kw in keywords):
-                        chosen = cat
-                        break
-                else:
-                    # ATM withdrawals
-                    if cat == "ATM Withdrawals" and "ATM" in method:
-                        chosen = cat
-                        break
-
-            # accumulate totals and details
+            for cat, kws in self.categories.items():
+                if kws and any(kw in desc for kw in kws):
+                    chosen = cat
+                    break
+                if cat == "ATM Withdrawals" and "ATM" in method:
+                    chosen = cat
+                    break
             self.expenses[chosen] += amt
             self.detail_entries[chosen].append((amt, desc))
-
-            # accumulate by city
             if city:
                 self.city_expenses.setdefault(city, 0.0)
                 self.city_expenses[city] += amt
             elif chosen == "ATM Withdrawals":
-                # no city → attribute ATM withdrawal to Sofia
                 self.city_expenses['SOFIA'] += amt
 
-        # — Populate Summary tab —
-        # clear old rows
-        for item in self.tree_summary.get_children():
-            self.tree_summary.delete(item)
-        # insert category totals
+        self._populate_summary()
+        self._populate_cities()
+        self._populate_categories()
+
+    def _populate_summary(self):
+        for i in self.tree_summary.get_children(): self.tree_summary.delete(i)
         for cat, total in self.expenses.items():
             self.tree_summary.insert("", "end", values=(cat, f"{total:.2f}"))
-        # blank separator
         self.tree_summary.insert("", "end", values=("", ""))
-        # grand total
-        grand_total = sum(self.expenses.values())
-        self.tree_summary.insert("", "end", values=("Grand Total", f"{grand_total:.2f}"))
+        self.tree_summary.insert("", "end", values=("Grand Total", f"{sum(self.expenses.values()):.2f}"))
 
-        # — Populate Cities tab —
-        for item in self.tree_cities.get_children():
-            self.tree_cities.delete(item)
+    def _populate_cities(self):
+        for i in self.tree_cities.get_children(): self.tree_cities.delete(i)
         for city, total in sorted(self.city_expenses.items()):
             self.tree_cities.insert("", "end", values=(city, f"{total:.2f}"))
 
-        # — Populate Category tabs —
+    def _populate_categories(self):
         for cat, tree in self.category_tabs.items():
-            for item in tree.get_children():
-                tree.delete(item)
+            for i in tree.get_children(): tree.delete(i)
             for amt, desc in self.detail_entries[cat]:
                 tree.insert("", "end", values=(f"{amt:.2f}", desc))
 
@@ -241,48 +234,97 @@ class ExpenseApp(ttk.Frame):
         if not self.expenses:
             messagebox.showwarning("No data", "Load data first.")
             return
-
         path = filedialog.asksaveasfilename(defaultextension=".txt",
                                             filetypes=[("Text files", "*.txt")])
-        if not path:
-            return
-
+        if not path: return
+        txt = self._compose_report_text()
         try:
             with open(path, "w", encoding="utf-8") as f:
-                # — Summary —
-                f.write("== Summary by Category ==\n")
-                f.write("Category,Total (BGN)\n")
-                for cat, total in self.expenses.items():
-                    f.write(f"{cat},{total:.2f}\n")
-                f.write("\n")
-
-                # Grand Total
-                grand_total = sum(self.expenses.values())
-                f.write(f"Grand Total,{grand_total:.2f}\n\n")
-
-                # — Details per Category —
-                f.write("== Detailed Expenses by Category ==\n")
-                for cat, entries in self.detail_entries.items():
-                    f.write(f"\n[{cat}]\n")
-                    f.write("Amount (BGN),Description\n")
-                    for amt, desc in entries:
-                        f.write(f"{amt:.2f},{desc}\n")
-                f.write("\n")
-
-                # — Cities —
-                f.write("== Expenses by City ==\n")
-                f.write("City,Total (BGN)\n")
-                for city, total in sorted(self.city_expenses.items()):
-                    f.write(f"{city},{total:.2f}\n")
-
+                f.write(txt)
             messagebox.showinfo("Saved", f"Report saved to:\n{path}")
             self.status.config(text=f"Report saved: {os.path.basename(path)}")
         except Exception as e:
             messagebox.showerror("Error", f"Could not save report:\n{e}")
 
+    def _compose_report_text(self) -> str:
+        lines = ["== Summary by Category ==", "Category,Total (BGN)"]
+        for cat, total in self.expenses.items():
+            lines.append(f"{cat},{total:.2f}")
+        lines += ["", f"Grand Total,{sum(self.expenses.values()):.2f}", "",
+                  "== Detailed Expenses by Category =="]
+        for cat, entries in self.detail_entries.items():
+            lines.append(f"\n[{cat}]")
+            lines.append("Amount (BGN),Description")
+            for amt, desc in entries:
+                lines.append(f"{amt:.2f},{desc}")
+        lines += ["", "== Expenses by City ==", "City,Total (BGN)"]
+        for city, total in sorted(self.city_expenses.items()):
+            lines.append(f"{city},{total:.2f}")
+        return "\n".join(lines)
+
+    def save_ai_insights(self):
+        content = self.ai_text.get("1.0", "end").strip()
+        if not content:
+            messagebox.showwarning("No AI content", "Generate AI insights first.")
+            return
+        path = filedialog.asksaveasfilename(defaultextension=".txt",
+                                            filetypes=[("Text files", "*.txt")])
+        if not path: return
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+            messagebox.showinfo("Saved", f"AI insights saved to:\n{path}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not save AI insights:\n{e}")
+
+    def generate_ai_insights(self):
+        if not self.expenses:
+            messagebox.showwarning("No data", "Load data first.")
+            return
+
+        # clear UI
+        self.ai_text.config(state="normal")
+        self.ai_text.delete("1.0", "end")
+        self.ai_text.config(state="disabled")
+        self.save_ai_btn.config(state="disabled")
+
+        self.status.config(text="Generating AI insights...")
+        self.progress.start(10)
+        self.ai_button.config(state="disabled")
+
+        def worker():
+            report = self._compose_report_text()
+            try:
+                resp = client.responses.create(
+                    model="gpt-4o",
+                    instructions="You are a financial assistant.",
+                    input=f"Provide breakdown of the report , key insights, and recommendations:\n{report}"
+                )
+                analysis = resp.output_text
+                error = None
+            except Exception as e:
+                analysis = ""
+                error = str(e)
+
+            def on_complete():
+                self.progress.stop()
+                self.ai_button.config(state="normal")
+                if error:
+                    messagebox.showerror("AI Error", f"Failed to generate insights:\n{error}")
+                    self.status.config(text="Ready")
+                else:
+                    self.ai_text.config(state="normal")
+                    self.ai_text.insert("1.0", analysis)
+                    self.ai_text.config(state="disabled")
+                    self.save_ai_btn.config(state="normal")
+                    self.status.config(text="AI insights generated.")
+
+            self.master.after(0, on_complete)
+
+        threading.Thread(target=worker, daemon=True).start()
+
 
 if __name__ == "__main__":
     root = tk.Tk()
-    style = ttk.Style(root)
     ExpenseApp(root)
     root.mainloop()
