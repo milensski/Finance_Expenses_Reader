@@ -249,12 +249,32 @@ class ExpenseApp(ttk.Frame):
 
         try:
             with open(path, "w", encoding="utf-8") as f:
+                # — Summary —
+                f.write("== Summary by Category ==\n")
                 f.write("Category,Total (BGN)\n")
                 for cat, total in self.expenses.items():
                     f.write(f"{cat},{total:.2f}\n")
-                f.write("\nExpenses per City:\nCity,Total (BGN)\n")
+                f.write("\n")
+
+                # Grand Total
+                grand_total = sum(self.expenses.values())
+                f.write(f"Grand Total,{grand_total:.2f}\n\n")
+
+                # — Details per Category —
+                f.write("== Detailed Expenses by Category ==\n")
+                for cat, entries in self.detail_entries.items():
+                    f.write(f"\n[{cat}]\n")
+                    f.write("Amount (BGN),Description\n")
+                    for amt, desc in entries:
+                        f.write(f"{amt:.2f},{desc}\n")
+                f.write("\n")
+
+                # — Cities —
+                f.write("== Expenses by City ==\n")
+                f.write("City,Total (BGN)\n")
                 for city, total in sorted(self.city_expenses.items()):
                     f.write(f"{city},{total:.2f}\n")
+
             messagebox.showinfo("Saved", f"Report saved to:\n{path}")
             self.status.config(text=f"Report saved: {os.path.basename(path)}")
         except Exception as e:
