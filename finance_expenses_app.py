@@ -27,7 +27,7 @@ class ExpenseApp(ttk.Frame):
         self.category_tabs = None
         self.master = master
         self.master.title("Modern Finance Expenses App")
-        self.master.geometry("1000x700")
+        self.master.geometry("1280x900")
 
         # Data containers
         self.df = None
@@ -60,6 +60,10 @@ class ExpenseApp(ttk.Frame):
         self.master.bind_all("<Control-s>", lambda e: self.save_report())
         self.master.bind_all("<Control-q>", lambda e: self.master.quit())
 
+        top_controls = ttk.Frame(self)
+        top_controls.pack(fill="x", pady=5)
+        ttk.Button(top_controls, text="Browse…", command=self.load_file).pack(side="left")
+
         # Tabs
         self.tabs = ttk.Notebook(self)
         self.tabs.pack(fill="both", expand=True)
@@ -86,9 +90,15 @@ class ExpenseApp(ttk.Frame):
             self.tabs.add(frame, text=cat)
             self._build_category_tab(frame, cat)
 
+        # Status Bar
+        self.status = ttk.Label(self, text="Welcome! Open an .xls file to begin.",
+                                relief="sunken", anchor="w")
+        self.status.pack(fill="x", side="top")
+
         # AI Insights controls
         self.ai_button = ttk.Button(self, text="Generate AI Insights", command=self.generate_ai_insights)
         self.ai_button.pack(side="top", pady=5)
+        self.ai_button.config(state='disabled')
 
         self.progress = ttk.Progressbar(self, mode='determinate', value=0)
         self.progress.pack(fill='x', pady=2)
@@ -103,14 +113,8 @@ class ExpenseApp(ttk.Frame):
         self.save_ai_btn.pack(pady=5)
         self.save_ai_btn.config(state='disabled')
 
-        # Status Bar
-        self.status = ttk.Label(self, text="Welcome! Open an .xls file to begin.",
-                                relief="sunken", anchor="w")
-        self.status.pack(fill="x", side="bottom")
-
     def _build_raw_tab(self):
-        btn = ttk.Button(self.tab_data, text="Browse…", command=self.load_file)
-        btn.pack(anchor="nw", pady=5)
+
         columns = ("Date", "Amount", "Method", "Description")
         self.tree_data = ttk.Treeview(self.tab_data, columns=columns, show="headings")
         for col in columns:
@@ -124,8 +128,8 @@ class ExpenseApp(ttk.Frame):
                                          show="headings")
         self.tree_summary.heading("Category", text="Category")
         self.tree_summary.heading("Total", text="Total (BGN)")
-        self.tree_summary.column("Category", anchor="w", width=300)
-        self.tree_summary.column("Total", anchor="e", width=100)
+        self.tree_summary.column("Category", anchor="e", width=200, stretch=False)
+        self.tree_summary.column("Total", anchor="center", width=100, stretch=False)
         self.tree_summary.pack(fill="both", expand=True, pady=10)
 
     def _build_cities_tab(self):
@@ -162,6 +166,7 @@ class ExpenseApp(ttk.Frame):
             messagebox.showerror("Error", f"Could not load file:\n{e}")
             return
         self.status.config(text=f"Loaded: {os.path.basename(path)}")
+        self.ai_button.config(state="normal")
         self._populate_raw()
         self._analyze()
 
@@ -306,6 +311,7 @@ class ExpenseApp(ttk.Frame):
             except Exception as e:
                 analysis = ""
                 error = str(e)
+                self.status.config(text=f"Error while trying to generate AI insights.")
 
             def on_complete():
                 self.progress.stop()
