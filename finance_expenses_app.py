@@ -28,7 +28,7 @@ class ExpenseApp(ttk.Frame):
             "Revolut": ['REVOLUT'],
             "ATM Withdrawals": [],  # will match by method
             "Fuel": ['BI OIL', 'DEGA', 'LUKOIL', 'EKO', 'SHELL'],
-            "Food": ['KAUFLAND', 'BILLA', 'LIDL', 'BOLERO', 'ANET'],
+            "Food": ['KAUFLAND', 'BILLA', 'LIDL', 'BOLERO', 'ANET', 'LIDAL', 'MINIMARKET'],
             "Other": []  # everything else
         }
 
